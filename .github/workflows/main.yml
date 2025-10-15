@@ -18,13 +18,18 @@ jobs:
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User
+      - name: Create RDP User (auto confirm)
         run: |
+          # Nếu bạn đã tắt yêu cầu độ phức tạp, giữ nguyên password yếu
           $User = "admin"
           $Password = "Cuongtrinh1235@"
-          net user $User $Password /add
-          net localgroup administrators $User /add
+
+          # /Y để bỏ qua prompt "Do you want to continue?"
+          net user $User $Password /add /y
+          net localgroup administrators $User /add /y
+
           Write-Host "✅ User: $User | Password: $Password"
+
 
       - name: Download and Install Tailscale
         run: |
