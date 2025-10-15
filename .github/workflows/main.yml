@@ -18,13 +18,49 @@ jobs:
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User
+            - name: Create RDP User (temporarily relax password policy)
         run: |
+          # paths
+          $exportPath = "C:\Windows\Temp\secpol_orig.cfg"
+          $tmpPath    = "C:\Windows\Temp\secpol_tmp.cfg"
+          $dbPath     = "C:\Windows\Temp\secedit.sdb"
+
+          # Export current security policy
+          secedit /export /cfg $exportPath
+
+          # Read exported cfg, modify password settings (set complexity=0, min length=0)
+          $cfg = Get-Content $exportPath -Raw
+          if ($cfg -notmatch 'PasswordComplexity') {
+            $cfg += "`r`nPasswordComplexity = 0"
+          } else {
+            $cfg = [regex]::Replace($cfg, 'PasswordComplexity\s*=\s*\d', 'PasswordComplexity = 0')
+          }
+          if ($cfg -notmatch 'MinimumPasswordLength') {
+            $cfg += "`r`nMinimumPasswordLength = 0"
+          } else {
+            $cfg = [regex]::Replace($cfg, 'MinimumPasswordLength\s*=\s*\d', 'MinimumPasswordLength = 0')
+          }
+          Set-Content -Path $tmpPath -Value $cfg -Encoding Unicode
+
+          # Apply temporary policy
+          secedit /configure /db $dbPath /cfg $tmpPath /areas SECURITYPOLICY
+
+          # Small wait to ensure policy applied
+          Start-Sleep -Seconds 3
+
+          # Create the user with weak password
           $User = "admin"
           $Password = "1"
           net user $User $Password /add
           net localgroup administrators $User /add
-          Write-Host "✅ User: $User | Password: $Password"
+          Write-Host "User created: $User / Password: $Password"
+
+          # Restore original policy
+          secedit /configure /db $dbPath /cfg $exportPath /areas SECURITYPOLICY
+
+          # Cleanup temp files (optional)
+          Remove-Item $tmpPath -ErrorAction SilentlyContinue
+          Remove-Item $dbPath -ErrorAction SilentlyContinue
 
       - name: Download and Install Tailscale
         run: |
